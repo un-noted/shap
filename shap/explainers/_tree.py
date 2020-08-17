@@ -1,18 +1,20 @@
-import numpy as np
-import scipy.special
-import multiprocessing
-import sys
+import itertools
 import json
+import multiprocessing
 import os
 import struct
-import itertools
+import sys
+import warnings
 from distutils.version import LooseVersion
-from ._explainer import Explainer
+
+import numpy as np
+import scipy.special
+
+from .. import maskers
+from .._explanation import Explanation
 from ..utils import assert_import, record_import_error, safe_isinstance
 from ..utils._legacy import DenseData
-from .._explanation import Explanation
-from .. import maskers
-import warnings
+from ._explainer import Explainer
 
 warnings.formatwarning = lambda msg, *args, **kwargs: str(msg) + '\n' # ignore everything except the message
 
@@ -208,7 +210,7 @@ class Tree(Explainer):
             e = Explanation(self.expected_value, v, X, input_names=feature_names, interaction_order=2)
         return e
 
-    def shap_values(self, X, y=None, tree_limit=None, approximate=False, check_additivity=True, from_call=False):
+    def shap_values(self, X, y=None, weights=None, tree_limit=None, approximate=False, check_additivity=True, from_call=False):
         """ Estimate the SHAP values for a set of samples.
 
         Parameters
@@ -348,7 +350,7 @@ class Tree(Explainer):
             _cext.dense_tree_shap(
                 self.model.children_left, self.model.children_right, self.model.children_default,
                 self.model.features, self.model.thresholds, self.model.values, self.model.node_sample_weight,
-                self.model.max_depth, X, X_missing, y, self.data, self.data_missing, tree_limit,
+                self.model.max_depth, X, X_missing, y, weights, self.data, self.data_missing, tree_limit,
                 self.model.base_offset, phi, feature_perturbation_codes[self.feature_perturbation],
                 output_transform_codes[transform], False
             )
@@ -1001,7 +1003,7 @@ class TreeEnsemble:
 
         return transform
 
-    def predict(self, X, y=None, output=None, tree_limit=None):
+    def predict(self, X, y=None, weights=None, output=None, tree_limit=None):
         """ A consistent interface to make predictions from this model.
 
         Parameters
@@ -1051,7 +1053,7 @@ class TreeEnsemble:
             self.children_left, self.children_right, self.children_default,
             self.features, self.thresholds, self.values,
             self.max_depth, tree_limit, self.base_offset, output_transform_codes[transform],
-            X, X_missing, y, output
+            X, X_missing, y, weights, output
         )
 
         # drop dimensions we don't need
@@ -1601,4 +1603,3 @@ class CatBoostTreeModelLoader:
                             }, data=data, data_missing=data_missing))
 
         return trees
-

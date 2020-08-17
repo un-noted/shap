@@ -99,6 +99,7 @@ struct ExplanationDataset {
     tfloat *X;
     bool *X_missing;
     tfloat *y;
+    tfloat *weights;
     tfloat *R;
     bool *R_missing;
     unsigned num_X;
@@ -106,9 +107,9 @@ struct ExplanationDataset {
     unsigned num_R;
 
     ExplanationDataset() {}
-    ExplanationDataset(tfloat *X, bool *X_missing, tfloat *y, tfloat *R, bool *R_missing, unsigned num_X,
+    ExplanationDataset(tfloat *X, bool *X_missing, tfloat *y, tfloat *weights, tfloat *R, bool *R_missing, unsigned num_X,
                        unsigned M, unsigned num_R) : 
-        X(X), X_missing(X_missing), y(y), R(R), R_missing(R_missing), num_X(num_X), M(M), num_R(num_R) {}
+        X(X), X_missing(X_missing), y(y), weights(weights), R(R), R_missing(R_missing), num_X(num_X), M(M), num_R(num_R) {}
 
     void get_x_instance(ExplanationDataset &instance, const unsigned i) const {
         instance.M = M;
@@ -220,8 +221,10 @@ inline void dense_tree_predict(tfloat *out, const TreeEnsemble &trees, const Exp
         // apply any needed transform
         if (transform != NULL) {
             const tfloat y_i = data.y == NULL ? 0 : data.y[i];
+            // const tfloat w_i = 1.0;
+            const tfloat w_i = data.weights == NULL ? 1 : data.weights[i];
             for (unsigned k = 0; k < trees.num_outputs; ++k) {
-                row_out[k] = transform(row_out[k], y_i);
+                row_out[k] = transform(row_out[k], y_i) * w_i;
             }
         }
 
@@ -1115,7 +1118,6 @@ inline void print_progress_bar(tfloat &last_print, tfloat start_time, unsigned i
  */
 void dense_independent(const TreeEnsemble& trees, const ExplanationDataset &data,
                        tfloat *out_contribs, tfloat transform(const tfloat, const tfloat)) {
-
     // reformat the trees for faster access
     Node *node_trees = new Node[trees.tree_limit * trees.max_nodes];
     for (unsigned i = 0; i < trees.tree_limit; ++i) {
@@ -1162,8 +1164,8 @@ void dense_independent(const TreeEnsemble& trees, const ExplanationDataset &data
     tfloat rescale_factor = 1.0;
     tfloat margin_x = 0;
     tfloat margin_r = 0;
-    time_t start_time = time(NULL);
-    tfloat last_print = 0;
+    // time_t start_time = time(NULL);
+    // tfloat last_print = 0;
     for (unsigned oind = 0; oind < trees.num_outputs; ++oind) {
         // set the values int he reformated tree to the current output index
         for (unsigned i = 0; i < trees.tree_limit; ++i) {
@@ -1180,8 +1182,10 @@ void dense_independent(const TreeEnsemble& trees, const ExplanationDataset &data
             const bool *x_missing = data.X_missing + i * data.M;
             instance_out_contribs = out_contribs + i * (data.M + 1) * trees.num_outputs;
             const tfloat y_i = data.y == NULL ? 0 : data.y[i];
+            // const tfloat w_i = 1.0;
+            const tfloat w_i = data.weights == NULL ? 1 : data.weights[i];
 
-            print_progress_bar(last_print, start_time, oind * data.num_X + i, data.num_X * trees.num_outputs);
+            // print_progress_bar(last_print, start_time, oind * data.num_X + i, data.num_X * trees.num_outputs);
 
             // compute the model's margin output for x
             if (transform != NULL) {
@@ -1219,6 +1223,7 @@ void dense_independent(const TreeEnsemble& trees, const ExplanationDataset &data
                     } else {
                         rescale_factor = (*transform)(margin_x, y_i) - (*transform)(margin_r, y_i);
                         rescale_factor /= margin_x - margin_r;
+                        rescale_factor *= w_i;
                     }
                 }
 
@@ -1230,7 +1235,7 @@ void dense_independent(const TreeEnsemble& trees, const ExplanationDataset &data
 
                 // Add the base offset
                 if (transform != NULL) {
-                    instance_out_contribs[data.M * trees.num_outputs + oind] += (*transform)(trees.base_offset[oind] + tmp_out_contribs[data.M], 0);
+                    instance_out_contribs[data.M * trees.num_outputs + oind] += (*transform)(trees.base_offset[oind] + tmp_out_contribs[data.M], 0) * w_i;
                 } else {
                     instance_out_contribs[data.M * trees.num_outputs + oind] += trees.base_offset[oind] + tmp_out_contribs[data.M];
                 }
