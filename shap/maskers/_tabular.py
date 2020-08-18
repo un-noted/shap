@@ -50,9 +50,9 @@ class Tabular(Masker):
         self.clustering = clustering
 
         # warn users about large background data sets
-        if self.data.shape[0] > 100:
-            log.warning("Using " + str(self.data.shape[0]) + " background data samples could cause slower " +
-                        "run times. Consider shap.utils.sample(data, K) to summarize the background using only K samples.")
+        # if self.data.shape[0] > 100:
+        #     log.warning("Using " + str(self.data.shape[0]) + " background data samples could cause slower " +
+        #                 "run times. Consider shap.utils.sample(data, K) to summarize the background using only K samples.")
 
         # compute the clustering of the data
         if clustering is not None:
