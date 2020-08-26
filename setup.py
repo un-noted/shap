@@ -1,12 +1,13 @@
-from setuptools import setup, Extension
-from setuptools.command.build_ext import build_ext as _build_ext
-import os
-import re
 import codecs
+import os
 import platform
+import re
+import sys
 from distutils.sysconfig import get_config_var
 from distutils.version import LooseVersion
-import sys
+
+from setuptools import Extension, setup
+from setuptools.command.build_ext import build_ext as _build_ext
 
 # to publish use:
 # > python setup.py sdist bdist_wheel upload
@@ -104,7 +105,7 @@ def run_setup(with_binary=True, test_xgboost=True, test_lightgbm=True, test_catb
         package_data={'shap': ['plots/resources/*', 'tree_shap.h']},
         cmdclass={'build_ext': build_ext},
         setup_requires=['numpy'],
-        install_requires=['numpy', 'scipy', 'scikit-learn', 'pandas', 'tqdm>4.25.0', 'slicer', 'numba'],
+        install_requires=['numpy', 'scipy', 'scikit-learn', 'pandas', 'tqdm>4.25.0', 'slicer==0.0.2', 'numba'],
         extras_require=extras_require,
         test_suite='nose.collector',
         tests_require=tests_require,
