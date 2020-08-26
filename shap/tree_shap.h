@@ -1181,7 +1181,16 @@ void dense_independent(const TreeEnsemble& trees, const ExplanationDataset &data
             const tfloat *x = data.X + i * data.M;
             const bool *x_missing = data.X_missing + i * data.M;
             instance_out_contribs = out_contribs + i * (data.M + 1) * trees.num_outputs;
-            const tfloat y_i = data.y == NULL ? 0 : data.y[i];
+
+            tfloat y_i = data.y == NULL ? 0 : data.y[i];
+            if (trees.num_outputs > 1) {
+                if (y_i == oind) {
+                    y_i = 1;
+                } else {
+                    y_i = 0;
+                }
+            }
+
             // const tfloat w_i = 1.0;
             const tfloat w_i = data.weights == NULL ? 1 : data.weights[i];
 
