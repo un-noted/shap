@@ -1,13 +1,12 @@
-import codecs
+from setuptools import setup, Extension
+from setuptools.command.build_ext import build_ext as _build_ext
 import os
-import platform
 import re
-import sys
+import codecs
+import platform
 from distutils.sysconfig import get_config_var
 from distutils.version import LooseVersion
-
-from setuptools import Extension, setup
-from setuptools.command.build_ext import build_ext as _build_ext
+import sys
 
 # to publish use:
 # > python setup.py sdist bdist_wheel upload
