@@ -1116,8 +1116,192 @@ inline void print_progress_bar(tfloat &last_print, tfloat start_time, unsigned i
 /**
  * Runs Tree SHAP with feature independence assumptions on dense data.
  */
+// void dense_independent(const TreeEnsemble& trees, const ExplanationDataset &data,
+//                        tfloat *out_contribs, tfloat transform(const tfloat, const tfloat)) {
+//     // reformat the trees for faster access
+//     Node *node_trees = new Node[trees.tree_limit * trees.max_nodes];
+//     for (unsigned i = 0; i < trees.tree_limit; ++i) {
+//         Node *node_tree = node_trees + i * trees.max_nodes;
+//         for (unsigned j = 0; j < trees.max_nodes; ++j) {
+//             const unsigned en_ind = i * trees.max_nodes + j;
+//             node_tree[j].cl = trees.children_left[en_ind];
+//             node_tree[j].cr = trees.children_right[en_ind];
+//             node_tree[j].cd = trees.children_default[en_ind];
+//             if (j == 0) {
+//                 node_tree[j].pnode = 0;
+//             }
+//             if (trees.children_left[en_ind] >= 0) { // relies on all unused entries having negative values in them
+//                 node_tree[trees.children_left[en_ind]].pnode = j;
+//                 node_tree[trees.children_left[en_ind]].pfeat = trees.features[en_ind];
+//             }
+//             if (trees.children_right[en_ind] >= 0) { // relies on all unused entries having negative values in them
+//                 node_tree[trees.children_right[en_ind]].pnode = j;
+//                 node_tree[trees.children_right[en_ind]].pfeat = trees.features[en_ind];
+//             }
+
+//             node_tree[j].thres = trees.thresholds[en_ind];
+//             node_tree[j].feat = trees.features[en_ind];
+//         }
+//     }
+
+//     // preallocate arrays needed by the algorithm
+//     float *pos_lst = new float[trees.max_nodes];
+//     float *neg_lst = new float[trees.max_nodes];
+//     int *node_stack = new int[(unsigned) trees.max_depth];
+//     signed short *feat_hist = new signed short[data.M];
+//     tfloat *tmp_out_contribs = new tfloat[(data.M + 1)];
+
+//     // precompute all the weight coefficients
+//     float *memoized_weights = new float[(trees.max_depth+1) * (trees.max_depth+1)];
+//     for (unsigned n = 0; n <= trees.max_depth; ++n) {
+//         for (unsigned m = 0; m <= trees.max_depth; ++m) {
+//             memoized_weights[n + trees.max_depth * m] = 1.0 / (n * bin_coeff(n-1, m));
+//         }
+//     }
+
+//     // compute the explanations for each sample
+//     tfloat *instance_out_contribs;
+//     tfloat rescale_factor = 1.0;
+//     tfloat margin_x = 0;
+//     tfloat margin_r = 0;
+//     // time_t start_time = time(NULL);
+//     // tfloat last_print = 0;
+//     for (unsigned oind = 0; oind < trees.num_outputs; ++oind) {
+//         // set the values int he reformated tree to the current output index
+//         for (unsigned i = 0; i < trees.tree_limit; ++i) {
+//             Node *node_tree = node_trees + i * trees.max_nodes;
+//             for (unsigned j = 0; j < trees.max_nodes; ++j) {
+//                 const unsigned en_ind = i * trees.max_nodes + j;
+//                 node_tree[j].value = trees.values[en_ind * trees.num_outputs + oind];
+//             }
+//         }
+
+//         // loop over all the samples
+//         for (unsigned i = 0; i < data.num_X; ++i) {
+//             const tfloat *x = data.X + i * data.M;
+//             const bool *x_missing = data.X_missing + i * data.M;
+//             instance_out_contribs = out_contribs + i * (data.M + 1) * trees.num_outputs;
+
+//             tfloat y_i = data.y == NULL ? 0 : data.y[i];
+//             if (trees.num_outputs > 1) {
+//                 if (y_i == oind) {
+//                     y_i = 1;
+//                 } else {
+//                     y_i = 0;
+//                 }
+//             }
+
+//             // const tfloat w_i = 1.0;
+//             const tfloat w_i = data.weights == NULL ? 1 : data.weights[i];
+
+//             // print_progress_bar(last_print, start_time, oind * data.num_X + i, data.num_X * trees.num_outputs);
+
+//             // compute the model's margin output for x
+//             if (transform != NULL) {
+//                 margin_x = trees.base_offset[oind];
+//                 for (unsigned k = 0; k < trees.tree_limit; ++k) {
+//                     margin_x += tree_predict(k, trees, x, x_missing)[oind];
+//                 }
+//             }
+
+//             for (unsigned j = 0; j < data.num_R; ++j) {
+//                 const tfloat *r = data.R + j * data.M;
+//                 const bool *r_missing = data.R_missing + j * data.M;
+//                 std::fill_n(tmp_out_contribs, (data.M + 1), 0);
+
+//                 // compute the model's margin output for r
+//                 if (transform != NULL) {
+//                     margin_r = trees.base_offset[oind];
+//                     for (unsigned k = 0; k < trees.tree_limit; ++k) {
+//                         margin_r += tree_predict(k, trees, r, r_missing)[oind];
+//                     }
+//                 }
+
+//                 for (unsigned k = 0; k < trees.tree_limit; ++k) {
+//                     tree_shap_indep(
+//                         trees.max_depth, data.M, trees.max_nodes, x, x_missing, r, r_missing, 
+//                         tmp_out_contribs, pos_lst, neg_lst, feat_hist, memoized_weights, 
+//                         node_stack, node_trees + k * trees.max_nodes
+//                     );
+//                 }
+
+//                 // compute the rescale factor
+//                 if (transform != NULL) {
+//                     if (margin_x == margin_r) {
+//                         rescale_factor = 1.0;
+//                     } else {
+//                         // std::cout << margin_x << " " << margin_r << std::endl;
+//                         rescale_factor = (*transform)(margin_x, y_i) - (*transform)(margin_r, y_i);
+//                         rescale_factor /= margin_x - margin_r;
+//                         rescale_factor *= w_i;
+//                     }
+//                 }
+
+//                 // add the effect of the current reference to our running total
+//                 // this is where we can do per reference scaling for non-linear transformations
+//                 for (unsigned k = 0; k < data.M; ++k) {
+//                     instance_out_contribs[k * trees.num_outputs + oind] += tmp_out_contribs[k] * rescale_factor;
+//                 }
+
+//                 // Add the base offset
+//                 if (transform != NULL) {
+//                     instance_out_contribs[data.M * trees.num_outputs + oind] += (*transform)(trees.base_offset[oind] + tmp_out_contribs[data.M], 0) * w_i;
+//                 } else {
+//                     instance_out_contribs[data.M * trees.num_outputs + oind] += trees.base_offset[oind] + tmp_out_contribs[data.M];
+//                 }
+//             }
+
+//             // average the results over all the references.
+//             for (unsigned j = 0; j < (data.M + 1); ++j) {
+//                 instance_out_contribs[j * trees.num_outputs + oind] /= data.num_R;
+//             }
+
+//             // apply the base offset to the bias term
+//             // for (unsigned j = 0; j < trees.num_outputs; ++j) {
+//             //     instance_out_contribs[data.M * trees.num_outputs + j] += (*transform)(trees.base_offset[j], 0);
+//             // }
+//         }
+//     }
+
+//     delete[] tmp_out_contribs;
+//     delete[] node_trees;
+//     delete[] pos_lst;
+//     delete[] neg_lst;
+//     delete[] node_stack;
+//     delete[] feat_hist;
+//     delete[] memoized_weights;
+// }
 void dense_independent(const TreeEnsemble& trees, const ExplanationDataset &data,
                        tfloat *out_contribs, tfloat transform(const tfloat, const tfloat)) {
+
+    int n_classes = 5;
+    float* probs = new float[n_classes];
+    auto compute_prob = [&probs, n_classes](float* margin, int cls) {
+        float total = 0;
+        for (int i=0; i < n_classes; i++) {
+            probs[i] = exp(margin[i]);
+            total += probs[i];
+        }
+        return probs[cls] / total;
+    };
+    auto cross_entropy = [&probs](float* margin, tfloat y, int n_classes) {
+        float total = 0;
+        for (int i=0; i < n_classes; i++) {
+            probs[i] = exp(margin[i]);
+            total += probs[i];
+        }
+        float H = 0;
+        for (int i=0; i < n_classes; i++) {
+            float p_x = 0;
+            if (y == i) {
+                p_x = 1;
+            }
+            H -= p_x * log(probs[i] / total);
+        }
+
+        return H;
+    };
+
     // reformat the trees for faster access
     Node *node_trees = new Node[trees.tree_limit * trees.max_nodes];
     for (unsigned i = 0; i < trees.tree_limit; ++i) {
@@ -1159,6 +1343,8 @@ void dense_independent(const TreeEnsemble& trees, const ExplanationDataset &data
         }
     }
 
+    float* margin_r_arr = new float[trees.num_outputs * data.num_R];
+    float* margin_x_arr = new float[trees.num_outputs * data.num_X];
     // compute the explanations for each sample
     tfloat *instance_out_contribs;
     tfloat rescale_factor = 1.0;
@@ -1175,6 +1361,44 @@ void dense_independent(const TreeEnsemble& trees, const ExplanationDataset &data
                 node_tree[j].value = trees.values[en_ind * trees.num_outputs + oind];
             }
         }
+        for (unsigned j = 0; j < data.num_R; ++j) {
+            const tfloat *r = data.R + j * data.M;
+            const bool *r_missing = data.R_missing + j * data.M;
+
+            // compute the model's margin output for r
+            margin_r = trees.base_offset[oind];
+            for (unsigned k = 0; k < trees.tree_limit; ++k) {
+                margin_r += tree_predict(k, trees, r, r_missing)[oind];
+            }
+            margin_r_arr[j * trees.num_outputs + oind] = margin_r;
+        }
+
+        // loop over all the samples
+        for (unsigned i = 0; i < data.num_X; ++i) {
+            const tfloat *x = data.X + i * data.M;
+            const bool *x_missing = data.X_missing + i * data.M;
+
+            // compute the model's margin output for x
+            margin_x = trees.base_offset[oind];
+            for (unsigned k = 0; k < trees.tree_limit; ++k) {
+                margin_x += tree_predict(k, trees, x, x_missing)[oind];
+            }
+            margin_x_arr[i * trees.num_outputs + oind] = margin_x;
+        }
+    }
+
+    for (unsigned oind = 0; oind < trees.num_outputs; ++oind) {
+        // set the values int he reformated tree to the current output index
+        for (unsigned i = 0; i < trees.tree_limit; ++i) {
+            Node *node_tree = node_trees + i * trees.max_nodes;
+            for (unsigned j = 0; j < trees.max_nodes; ++j) {
+                const unsigned en_ind = i * trees.max_nodes + j;
+                node_tree[j].value = trees.values[en_ind * trees.num_outputs + oind];
+            }
+        }
+
+        float* margin_x_p;
+        float* margin_r_p;
 
         // loop over all the samples
         for (unsigned i = 0; i < data.num_X; ++i) {
@@ -1183,39 +1407,23 @@ void dense_independent(const TreeEnsemble& trees, const ExplanationDataset &data
             instance_out_contribs = out_contribs + i * (data.M + 1) * trees.num_outputs;
 
             tfloat y_i = data.y == NULL ? 0 : data.y[i];
-            if (trees.num_outputs > 1) {
-                if (y_i == oind) {
-                    y_i = 1;
-                } else {
-                    y_i = 0;
-                }
-            }
+            
+            // if (y_i == oind) {
+            //     y_i = 1.0;
+            // } else {
+            //     y_i = 0.0;
+            // }
 
-            // const tfloat w_i = 1.0;
-            const tfloat w_i = data.weights == NULL ? 1 : data.weights[i];
+            margin_x = margin_x_arr[i * trees.num_outputs + oind];
+            margin_x_p = &margin_x_arr[i * trees.num_outputs];
+            float margin_x_prob = compute_prob(margin_x_p, data.y[i]);
 
             // print_progress_bar(last_print, start_time, oind * data.num_X + i, data.num_X * trees.num_outputs);
-
-            // compute the model's margin output for x
-            if (transform != NULL) {
-                margin_x = trees.base_offset[oind];
-                for (unsigned k = 0; k < trees.tree_limit; ++k) {
-                    margin_x += tree_predict(k, trees, x, x_missing)[oind];
-                }
-            }
 
             for (unsigned j = 0; j < data.num_R; ++j) {
                 const tfloat *r = data.R + j * data.M;
                 const bool *r_missing = data.R_missing + j * data.M;
                 std::fill_n(tmp_out_contribs, (data.M + 1), 0);
-
-                // compute the model's margin output for r
-                if (transform != NULL) {
-                    margin_r = trees.base_offset[oind];
-                    for (unsigned k = 0; k < trees.tree_limit; ++k) {
-                        margin_r += tree_predict(k, trees, r, r_missing)[oind];
-                    }
-                }
 
                 for (unsigned k = 0; k < trees.tree_limit; ++k) {
                     tree_shap_indep(
@@ -1225,16 +1433,25 @@ void dense_independent(const TreeEnsemble& trees, const ExplanationDataset &data
                     );
                 }
 
+                margin_r = margin_r_arr[j * trees.num_outputs + oind];
+                margin_r_p = &margin_r_arr[j * trees.num_outputs];
+                float margin_r_prob = compute_prob(margin_r_p, data.y[i]);
+
                 // compute the rescale factor
-                if (transform != NULL) {
-                    if (margin_x == margin_r) {
-                        rescale_factor = 1.0;
-                    } else {
-                        rescale_factor = (*transform)(margin_x, y_i) - (*transform)(margin_r, y_i);
-                        rescale_factor /= margin_x - margin_r;
-                        rescale_factor *= w_i;
-                    }
+                if (margin_x == margin_r) {
+                    rescale_factor = 1.0;
+                } else {
+                    // std::cout << margin_x_arr[i * trees.num_outputs + oind]
+                        rescale_factor = -log(margin_x_prob) + log(margin_r_prob);
+                        // rescale_factor = -y_i * log(margin_x_prob) - (-y_i * log(margin_r_prob));
+                        // rescale_factor = (*transform)(margin_x_prob, y_i) - (*transform)(margin_r_prob, y_i);
+                        // rescale_factor = (*transform)(margin_x, y_i) - (*transform)(margin_r, y_i);
+                    // rescale_factor = cross_entropy(margin_x_p, y_i, n_classes) - cross_entropy(margin_r_p, y_i, n_classes);
+                    rescale_factor /= margin_x - margin_r;
                 }
+                // if (data.y[i] != oind) {
+                //     rescale_factor = 0;
+                // }
 
                 // add the effect of the current reference to our running total
                 // this is where we can do per reference scaling for non-linear transformations
@@ -1243,22 +1460,13 @@ void dense_independent(const TreeEnsemble& trees, const ExplanationDataset &data
                 }
 
                 // Add the base offset
-                if (transform != NULL) {
-                    instance_out_contribs[data.M * trees.num_outputs + oind] += (*transform)(trees.base_offset[oind] + tmp_out_contribs[data.M], 0) * w_i;
-                } else {
-                    instance_out_contribs[data.M * trees.num_outputs + oind] += trees.base_offset[oind] + tmp_out_contribs[data.M];
-                }
+                // instance_out_contribs[data.M * trees.num_outputs + oind] += (*transform)(trees.base_offset[oind] + tmp_out_contribs[data.M], 0);
             }
 
             // average the results over all the references.
             for (unsigned j = 0; j < (data.M + 1); ++j) {
                 instance_out_contribs[j * trees.num_outputs + oind] /= data.num_R;
             }
-
-            // apply the base offset to the bias term
-            // for (unsigned j = 0; j < trees.num_outputs; ++j) {
-            //     instance_out_contribs[data.M * trees.num_outputs + j] += (*transform)(trees.base_offset[j], 0);
-            // }
         }
     }
 
@@ -1269,6 +1477,8 @@ void dense_independent(const TreeEnsemble& trees, const ExplanationDataset &data
     delete[] node_stack;
     delete[] feat_hist;
     delete[] memoized_weights;
+    delete[] margin_r_arr;
+    delete[] probs;
 }
 
 
