@@ -1290,23 +1290,6 @@ void dense_independent(const TreeEnsemble& trees, const ExplanationDataset &data
         }
         return probs[cls] / total;
     };
-    auto cross_entropy = [&probs](float* margin, tfloat y, int n_classes) {
-        float total = 0;
-        for (int i=0; i < n_classes; i++) {
-            probs[i] = exp(margin[i]);
-            total += probs[i];
-        }
-        float H = 0;
-        for (int i=0; i < n_classes; i++) {
-            float p_x = 0;
-            if (y == i) {
-                p_x = 1;
-            }
-            H -= p_x * log(probs[i] / total);
-        }
-
-        return H;
-    };
 
     // reformat the trees for faster access
     Node *node_trees = new Node[trees.tree_limit * trees.max_nodes];
@@ -1408,9 +1391,9 @@ void dense_independent(const TreeEnsemble& trees, const ExplanationDataset &data
 
         // loop over all the samples
         for (unsigned i = 0; i < data.num_X; ++i) {
-            if (data.y[i] != oind) {
-                continue;
-            }
+            // if (data.y[i] != oind) {
+            //     continue;
+            // }
 
             const tfloat *x = data.X + i * data.M;
             const bool *x_missing = data.X_missing + i * data.M;
@@ -1418,16 +1401,16 @@ void dense_independent(const TreeEnsemble& trees, const ExplanationDataset &data
 
             tfloat y_i = data.y == NULL ? 0 : data.y[i];
             
-            // if (y_i == oind) {
-            //     y_i = 1.0;
-            // } else {
-            //     y_i = 0.0;
-            // }
+            if (y_i == oind) {
+                y_i = 1.0;
+            } else {
+                y_i = 0.0;
+            }
 
             // https://discuss.xgboost.ai/t/multiclassification-training-process/29
             margin_x = margin_x_arr[i * trees.num_outputs + oind];
             margin_x_p = &margin_x_arr[i * trees.num_outputs];
-            float margin_x_prob = compute_prob(margin_x_p, data.y[i]);
+            float margin_x_prob = compute_prob(margin_x_p, oind);
 
             // print_progress_bar(last_print, start_time, oind * data.num_X + i, data.num_X * trees.num_outputs);
 
@@ -1446,18 +1429,14 @@ void dense_independent(const TreeEnsemble& trees, const ExplanationDataset &data
 
                 margin_r = margin_r_arr[j * trees.num_outputs + oind];
                 margin_r_p = &margin_r_arr[j * trees.num_outputs];
-                float margin_r_prob = compute_prob(margin_r_p, data.y[i]);
+                float margin_r_prob = compute_prob(margin_r_p, oind);
 
                 // compute the rescale factor
                 if (margin_x == margin_r) {
                     rescale_factor = 1.0;
                 } else {
-                    // std::cout << margin_x_arr[i * trees.num_outputs + oind]
-                        rescale_factor = -log(margin_x_prob) + log(margin_r_prob);
-                        // rescale_factor = -y_i * log(margin_x_prob) - (-y_i * log(margin_r_prob));
-                        // rescale_factor = (*transform)(margin_x_prob, y_i) - (*transform)(margin_r_prob, y_i);
-                        // rescale_factor = (*transform)(margin_x, y_i) - (*transform)(margin_r, y_i);
-                    // rescale_factor = cross_entropy(margin_x_p, y_i, n_classes) - cross_entropy(margin_r_p, y_i, n_classes);
+                    // rescale_factor = -log(margin_x_prob) + log(margin_r_prob);
+                    rescale_factor = (*transform)(margin_x_prob, y_i) - (*transform)(margin_r_prob, y_i);
                     rescale_factor /= margin_x - margin_r;
                 }
 
