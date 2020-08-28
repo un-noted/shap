@@ -138,7 +138,13 @@ inline tfloat logistic_transform(const tfloat margin, const tfloat y) {
 }
 
 inline tfloat logistic_nlogloss_transform(const tfloat margin, const tfloat y) {
-    return log(1 + exp(margin)) - y * margin; // y is in {0, 1}
+    if (y == 1) {
+        return -log(margin);
+    } else {
+        return -log(1 - margin);
+    }
+
+    // return log(1 + exp(margin)) - y * margin; // y is in {0, 1}
 }
 
 inline tfloat squared_loss_transform(const tfloat margin, const tfloat y) {
@@ -1402,6 +1408,10 @@ void dense_independent(const TreeEnsemble& trees, const ExplanationDataset &data
 
         // loop over all the samples
         for (unsigned i = 0; i < data.num_X; ++i) {
+            if (data.y[i] != oind) {
+                continue;
+            }
+
             const tfloat *x = data.X + i * data.M;
             const bool *x_missing = data.X_missing + i * data.M;
             instance_out_contribs = out_contribs + i * (data.M + 1) * trees.num_outputs;
@@ -1414,6 +1424,7 @@ void dense_independent(const TreeEnsemble& trees, const ExplanationDataset &data
             //     y_i = 0.0;
             // }
 
+            // https://discuss.xgboost.ai/t/multiclassification-training-process/29
             margin_x = margin_x_arr[i * trees.num_outputs + oind];
             margin_x_p = &margin_x_arr[i * trees.num_outputs];
             float margin_x_prob = compute_prob(margin_x_p, data.y[i]);
@@ -1449,9 +1460,6 @@ void dense_independent(const TreeEnsemble& trees, const ExplanationDataset &data
                     // rescale_factor = cross_entropy(margin_x_p, y_i, n_classes) - cross_entropy(margin_r_p, y_i, n_classes);
                     rescale_factor /= margin_x - margin_r;
                 }
-                // if (data.y[i] != oind) {
-                //     rescale_factor = 0;
-                // }
 
                 // add the effect of the current reference to our running total
                 // this is where we can do per reference scaling for non-linear transformations
