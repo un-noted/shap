@@ -1465,6 +1465,7 @@ void dense_independent(const TreeEnsemble& trees, const ExplanationDataset &data
     delete[] feat_hist;
     delete[] memoized_weights;
     delete[] margin_r_arr;
+    delete[] margin_x_arr;
     delete[] probs;
 }
 
