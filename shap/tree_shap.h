@@ -1391,9 +1391,9 @@ void dense_independent(const TreeEnsemble& trees, const ExplanationDataset &data
 
         // loop over all the samples
         for (unsigned i = 0; i < data.num_X; ++i) {
-            // if (data.y[i] != oind) {
-            //     continue;
-            // }
+            if (data.y[i] != oind) {
+                continue;
+            }
 
             const tfloat *x = data.X + i * data.M;
             const bool *x_missing = data.X_missing + i * data.M;
